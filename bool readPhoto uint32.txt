@@ -1,0 +1,147 @@
+int readRotationState() {
+  int start_value = analogRead(ANALOG_PIN);
+  digitalWrite(LED_PIN, LOW);
+  delayMicroseconds(1000);
+  //esp_sleep_enable_timer_wakeup(1000);
+  //esp_light_sleep_start();
+  int diff_value = - start_value + analogRead(ANALOG_PIN);
+  digitalWrite(LED_PIN, HIGH);
+
+  //Serial_print(diff_value);
+  //Serial_print(" ");
+
+  return diff_value > 100;
+}
+
+
+/*
+
+bool readPhoto() {
+  uint32_t now = millis();
+  int rotationState = readRotationState();
+  //Serial_print(rotationState);
+
+  if (rotationStateToCount == rotationState) {
+    rotationsCount += 1;
+  } else {
+    rotationsCount = 0;
+  }
+
+  if(rotationsCount == 3) {
+    rotationsCount = 0;
+    rotationStateToCount = !rotationStateToCount;
+    return true;
+  }
+
+  return false;
+}
+
+
+  portENTER_CRITICAL(&timerMux);
+  int savedRotationCount = rotationCount2;
+  portEXIT_CRITICAL(&timerMux);
+  
+  if (savedRotationCount > 0) {
+    for(int i=0; i<savedRotationCount; i++) {
+      Serial_print("|");
+    }
+    portENTER_CRITICAL(&timerMux);
+    rotationCount2 = 0;
+    portEXIT_CRITICAL(&timerMux);
+  }
+
+  portENTER_CRITICAL(&timerMux);
+  float savedLastSpeedRead = lastSpeedRead;
+  portEXIT_CRITICAL(&timerMux);
+  if (savedLastSpeedRead != -1) {
+    Serial_print("Speed:");
+    Serial_println(savedLastSpeedRead);
+
+    portENTER_CRITICAL(&timerMux);
+    lastSpeedRead = -1;
+    portEXIT_CRITICAL(&timerMux);
+  }
+
+  //updateSerial();
+
+  uint32_t now = millis();
+  if (now - lastReadPhoto >= 5) {
+    uint32_t t0 = micros(); 
+    if(readPhoto()) {
+      //Serial_println();
+      allRotationCount ++;
+      rotationCount ++; 
+      rps += 1000.0f / (now - lastDetection);
+      lastDetection = now; 
+      Serial_print("|");
+    }
+   
+    //if (millis() - lastPrintDuration > 1000) {
+    //  uint32_t t1 = micros();
+    //  Serial_print("Duration compute (us): ");
+    //  Serial_println(t1 - t0);
+    //  lastPrintDuration = now;
+    //}
+
+    lastReadPhoto = now;
+  }
+
+  if (millis() - lastPrint > 1000*1234567) {
+    //Serial_print(".");
+    //if(nDots++ % (60*2) == 0) Serial_println();
+    lastPrint = millis();
+    int speed = 0;
+    if(speedCount != 0) speed = speedSum / speedCount;
+    speedSum = 0;
+    speedCount = 0;
+
+    float sped =  rotationCount == 0? 0 : rps / rotationCount;
+    rotationCount = 0; 
+    rps = 0;
+
+    Serial_print("speed:"); 
+    Serial_print(sped);
+    Serial_println();
+  }
+*/
+
+/*
+  if (millis() - lastPrint > 1000) {
+    lastPrint = millis();
+    int speed = 0;
+    if(speedCount != 0) speed = speedSum / speedCount;
+    speedSum = 0;
+    speedCount = 0;
+
+    portENTER_CRITICAL(&timerMux);
+    float sped =  rotationCount == 0? 0 : rps / rotationCount;
+    rotationCount = 0; 
+    rps = 0;
+    portEXIT_CRITICAL(&timerMux);
+
+    Serial_print("speed:"); 
+    Serial_print(sped);
+    Serial_println();
+  }
+
+
+  static int ndots = 0;
+  Serial_print(".");
+  if (ndots++ % 100 == 0) Serial_println();
+  
+  digitalWrite(BOARD_LED_PIN, HIGH);
+  esp_sleep_enable_timer_wakeup(40 * 1000);
+  esp_light_sleep_start();
+
+  digitalWrite(BOARD_LED_PIN, LOW);
+  esp_sleep_enable_timer_wakeup(2 * 1000 * 1000); // 3 seconds sleep 
+  esp_light_sleep_start();
+*/  
+  
+  //digitalWrite(BOARD_LED_PIN, HIGH);
+  //esp_sleep_enable_timer_wakeup(40 * 1000);
+  //esp_light_sleep_start();
+  //delay(1000);
+  //delay(1);
+
+
