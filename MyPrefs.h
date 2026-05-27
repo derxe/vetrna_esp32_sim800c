@@ -133,6 +133,8 @@ struct AppPrefs {
   uint8_t  send_data_interval_min;     // minutes between data sends 
   uint8_t  n_send_retries;             // how many times do we retry sending 
   uint16_t wind_log_store_len;         // how many wind data we can store, to be send on the next interaction 
+  uint16_t tcp_packet_size;            // max TCP payload chunk size when sending larger packets
+  uint8_t  send_over_tcp;              // 1 sends over TCP, 0 sends over HTTP
 
 
   uint8_t  at_timeout_s;               // timeouts for crutical AT commands
@@ -156,12 +158,15 @@ struct AppPrefs {
   float  vsolar_calib;              // calibration for converting the measured voltage on vsolar to the actual voltage
 };
 
+#define TCP_PACKET_SIZE_MIN 20
+#define TCP_PACKET_SIZE_MAX 1000
+
 // define default preferences:
 AppPrefs prefs = {
   /*pref_version*/              0,
   /*pref_set_date*/             0, 
   /*load_def_prefs*/            0,      // should be always 0 unless we want to use default preferences every reset
-  /*version*/                   "v2.2",
+  /*version*/                   "v2.3",
 
   /*url_data*/                  "http://46.224.24.144/veter/save/",
   /*url_prefs*/                 "http://46.224.24.144/veter/save_prefs/",
@@ -179,6 +184,8 @@ AppPrefs prefs = {
   /*send_data_interval_min*/      10,    
   /*n_send_retries*/              3,
   /*wind_log_store_len*/          600,    
+  /*tcp_packet_size*/             60,
+  /*send_over_tcp*/               1,
 
   /*at_timeout_s*/              10,     
   /*sim_timeout_s*/             20,     
@@ -190,7 +197,7 @@ AppPrefs prefs = {
   /*dir_led_on_time_ms*/        10,  
   /*spin_led_on_time_ms*/       20,  
   /*blink_led_on_time_ms*/      20,  
-  /*blink_led_interval_ds*/     20,  // deciseconds (0.1 s)
+  /*blink_led_interval_ds*/     40,  // deciseconds (0.1 s)
 
   /*wind_dir_read_interval_s*/    3,    
   /*enable_wind_speed_read*/      1,
@@ -225,6 +232,8 @@ void printPreferences() {
   Serial_print("  wind_log_store_len:   "); Serial_println(prefs.wind_log_store_len);
   Serial_print("  send_data_interval_min:     "); Serial_println(prefs.send_data_interval_min);
   Serial_print("  n_send_retries:             "); Serial_println(prefs.n_send_retries);
+  Serial_print("  tcp_packet_size:            "); Serial_println(prefs.tcp_packet_size);
+  Serial_print("  send_over_tcp:              "); Serial_println(prefs.send_over_tcp);
   Serial_println();
 
   Serial_print("  at_timeout_s:    ");       Serial_println(prefs.at_timeout_s);
@@ -354,6 +363,12 @@ bool saveNewPrefValue(String key, String value) {
   else if(key == "wind_log_store_len") {
     prefs.wind_log_store_len = value.toInt();
   }
+  else if(key == "tcp_packet_size") {
+    prefs.tcp_packet_size = constrain(value.toInt(), TCP_PACKET_SIZE_MIN, TCP_PACKET_SIZE_MAX);
+  }
+  else if(key == "send_over_tcp") {
+    prefs.send_over_tcp = constrain(value.toInt(), 0, 1);
+  }
 
   else {
     Serial_print("Unable to find the prefs key: '"); Serial_print(key); Serial_println("'");
@@ -389,6 +404,8 @@ String getPostBodyPrefs() {
   body += "read_temp_enabled=" + String(prefs.read_temp_enabled) + ";";
   body += "send_data_interval_min=" + String(prefs.send_data_interval_min) + ";";
   body += "n_send_retries=" + String(prefs.n_send_retries) + ";";
+  body += "tcp_packet_size=" + String(prefs.tcp_packet_size) + ";";
+  body += "send_over_tcp=" + String(prefs.send_over_tcp) + ";";
 
   body += "at_timeout_s=" + String(prefs.at_timeout_s) + ";";
   body += "sim_timeout_s=" + String(prefs.sim_timeout_s) + ";";

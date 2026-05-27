@@ -25,6 +25,17 @@ public:
         ERR_SEND_ERRORS_HTTP_FAIL_RESPONSE = 16,
         ERR_SEND_V_BATT_TOO_LOW          = 17, 
 
+        ERR_TCP_CONN_START, // TODO asign numbers to all the errors and shitf other error names
+        ERR_TCP_SEND_DATA,
+        ERR_TCP_SEND_PREFS,
+        ERR_TCP_SEND_ERRORS,
+        ERR_TCP_CONN_CLOSED,
+        ERR_TCP_CONN_NOT_OK,
+        ERR_TCP_CIPSEND,
+        ERR_TCP_NO_SRV_RESPONSE,
+        ERR_TCP_WRONG_RESPONSE_LEN,
+        ERR_TCP_NO_GOT_RESPONSE,
+
         // ---- direction wind vane ----
         ERR_DIR_READ             = 20,
         ERR_DIR_READ_ONCE        = 21,
