@@ -65,7 +65,9 @@ float read_batt_v();
 float read_solar_v();
 void savePreferences();
 String getPostBody();
+String getPostBodyShort();
 extern bool accurateTimeSet;
+extern time_t accurateTimeSetAt;
 extern volatile bool enableErrorLedBlinking;
 extern int16_t lastSpeedRead;
 extern int last_direction_read;
@@ -327,6 +329,7 @@ bool parseCCLKResponse(String& response) {
   shiftTimestampsOnNewTime(hour, minute, second); 
   set_system_time_ymdhms(year, month, day, hour, minute, second);
   accurateTimeSet = true;
+  accurateTimeSetAt = (time_t)now_rtc_s();
 
   // Print the parsed time
   Serial_print("New date:"); Serial_println(getFormattedTimeLibString());
@@ -344,6 +347,13 @@ bool parseCLTSResponse(String& response) {
 
   //Serial_println("got clts value: " + String(clts_val));
   return clts_val == '1';
+}
+
+bool shouldUpdateAccurateTime() {
+  int64_t secondsSinceAccurateTimeSet = now_rtc_s() - (int64_t)accurateTimeSetAt;
+  return !accurateTimeSet || accurateTimeSetAt == 0 ||
+         secondsSinceAccurateTimeSet < 0 ||
+         secondsSinceAccurateTimeSet >= 2 * 60 * 60; // check every 2 hours if the time is still accurate
 }
 
 bool parseCSMINSResponse(String& response) {
@@ -640,6 +650,12 @@ bool sendGET(const String &url) {
 }
 
 
+bool sendShortMessage = false;
+void setSendShortMessage(bool value) {
+  sendShortMessage = value;
+}
+
+
 SendResult sendOverHttp() {
     // Step 1: Configure GPRS connection
   if (sendCommand("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"", 1000) == "") return SendResult::GPRS_SETUP_FAIL;
@@ -660,9 +676,11 @@ SendResult sendOverHttp() {
 
   if (sendCommand("AT+HTTPINIT", 1000) == "") return SendResult::HTTP_FAIL;
 
-  if (!sendPOST(prefs.url_data + imsiNum, getPostBody())) return SendResult::HTTP_FAIL;
-  
-  waitForResponse("AT+HTTPREAD", 5, parseHTTPREADResponse); // TODO make this http read timeout configurable 
+  String postBody = sendShortMessage? getPostBodyShort() : getPostBody();
+  sendShortMessage = false; // reset the flag after sending
+  if (!sendPOST(prefs.url_data + imsiNum, postBody)) return SendResult::HTTP_FAIL;
+
+  waitForResponse("AT+HTTPREAD", 5, parseHTTPREADResponse); // TODO make this http read timeout configurable
 
   if(postReturnData.indexOf("saved:") < 0) {
     // expected "saved:" in the response if it is not there the response from the server was incorrect
@@ -740,8 +758,14 @@ bool startTcpConnection() {
   if (sendCommand("AT+CIFSR", 1000, "\r\n") == "") return false; // Get your IP address, we should get our IP address. if not If it fails 
   
   // connect to the TCP server
-  if (sendCommand("AT+CIPSTART=\"TCP\",\"46.224.24.144\",\"64562\"", 1000) == "") return false;
-  // TODO make this configurable with preferences so ip and port 
+  String command;
+  command.reserve(48);
+  command = "AT+CIPSTART=\"TCP\",\"";
+  command += prefs.tcp_server_ip;
+  command += "\",\"";
+  command += prefs.tcp_server_port;
+  command += '"';
+  if (sendCommand(command, 1000) == "") return false;
   
   return true;
 }
@@ -755,7 +779,7 @@ bool establishConnection() {
   }
 
   unsigned long start = millis();
-  if (!waitForResponse("AT+CSMINS?", prefs.sim_timeout_s, parseCSMINSResponse, 100)) {
+  if (!waitForResponse("AT+CSMINS?", prefs.sim_timeout_s, parseCSMINSResponse, 200)) {
     Serial_println("ERROR: No Sim detected!.");
     elog.log(ErrorLogger::ERR_SEND_NO_SIM);
     return false;
@@ -786,13 +810,16 @@ bool establishConnection() {
     sendCommand("AT+CLTS=1");
     sendCommand("AT&W");
 
-    elog.log(ErrorLogger::ERR_SEND_CCLK_FAIL);
+    elog.log(ErrorLogger::ERR_SEND_CLTS_NOT_SET);
     return false;
   }
 
-  if (!waitForResponse("AT+CCLK?", 30, parseCCLKResponse, 500)) {
-    elog.log(ErrorLogger::ERR_SEND_CCLK_FAIL);
-    return false;
+
+  if (shouldUpdateAccurateTime()) {
+    if (!waitForResponse("AT+CCLK?", 30, parseCCLKResponse, 500)) {
+      elog.log(ErrorLogger::ERR_SEND_CCLK_FAIL);
+      return false;
+    }
   }
 
   // get IMSI number 
@@ -921,6 +948,7 @@ String sendTCPData(const String& dataToSend, bool waitForReply=true) {
   }
 
   // TODO make 10 seconds wait time from server configurable
+  //delay(1000);
   if(!waitForResponse("AT+CIPRXGET=4", 10, parseCIPRXGET4, 300)) {
     elog.log(ErrorLogger::ERR_TCP_NO_SRV_RESPONSE);
     return "";
@@ -998,7 +1026,9 @@ void sendStreamTCP(int durationSec) {
 }
 
 bool sendOverTCP() {
-  String postBodyData = getPostBody();
+  String postBodyData = sendShortMessage? getPostBodyShort() : getPostBody();
+  sendShortMessage = false; // reset the flag after sending
+
   const String dataPacket = "data|" + imsiNum + "|" + String(postBodyData.length()) + "|" + postBodyData + "|done";
   if(!sendTCP_break_into_packets(dataPacket)) {
     elog.log(ErrorLogger::ERR_TCP_SEND_DATA);

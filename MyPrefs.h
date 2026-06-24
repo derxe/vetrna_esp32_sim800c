@@ -135,6 +135,8 @@ struct AppPrefs {
   uint16_t wind_log_store_len;         // how many wind data we can store, to be send on the next interaction 
   uint16_t tcp_packet_size;            // max TCP payload chunk size when sending larger packets
   uint8_t  send_over_tcp;              // 1 sends over TCP, 0 sends over HTTP
+  char     tcp_server_ip[16];           // IPv4 address of the TCP server
+  uint16_t tcp_server_port;             // TCP server port
 
 
   uint8_t  at_timeout_s;               // timeouts for crutical AT commands
@@ -152,7 +154,8 @@ struct AppPrefs {
   uint16_t wind_dir_read_interval_s;  // seconds between direction reads (0 disables)
   int8_t   enable_wind_speed_read;  // set to <= 0 to disable it 
 
-  uint8_t  read_temp_enabled;       // 0 disables temp1/temp2 reads during send, 1-enables temp 1, 2-enables temp2, 3-enables both of them
+  uint8_t  read_temp_in;            // 0 disables inside temperature reads, nonzero enables them
+  uint8_t  read_temp_out;           // 0 disables outside temperature reads, nonzero enables them
 
   float  vbat_calib;                // calibration for converting the measured voltage on vbat to the actual voltage
   float  vsolar_calib;              // calibration for converting the measured voltage on vsolar to the actual voltage
@@ -166,7 +169,7 @@ AppPrefs prefs = {
   /*pref_version*/              0,
   /*pref_set_date*/             0, 
   /*load_def_prefs*/            0,      // should be always 0 unless we want to use default preferences every reset
-  /*version*/                   "v2.3",
+  /*version*/                   "v2.3.3",
 
   /*url_data*/                  "http://46.224.24.144/veter/save/",
   /*url_prefs*/                 "http://46.224.24.144/veter/save_prefs/",
@@ -184,8 +187,11 @@ AppPrefs prefs = {
   /*send_data_interval_min*/      10,    
   /*n_send_retries*/              3,
   /*wind_log_store_len*/          600,    
+
   /*tcp_packet_size*/             60,
   /*send_over_tcp*/               1,
+  /*tcp_server_ip*/               "46.224.24.144",
+  /*tcp_server_port*/             64562,
 
   /*at_timeout_s*/              10,     
   /*sim_timeout_s*/             20,     
@@ -197,12 +203,13 @@ AppPrefs prefs = {
   /*dir_led_on_time_ms*/        10,  
   /*spin_led_on_time_ms*/       20,  
   /*blink_led_on_time_ms*/      20,  
-  /*blink_led_interval_ds*/     40,  // deciseconds (0.1 s)
+  /*blink_led_interval_ds*/     30,  // deciseconds (0.1 s)
 
-  /*wind_dir_read_interval_s*/    3,    
-  /*enable_wind_speed_read*/      1,
+  /*wind_dir_read_interval_s*/  3,    
+  /*enable_wind_speed_read*/    1,
 
-  /*read_temp_enabled*/         1,
+  /*read_temp_in*/              1,
+  /*read_temp_out*/             0,
 
   /*vbat_calib*/                0.0006355, 
   /*vsolar_calib*/              0.0013695,
@@ -232,8 +239,12 @@ void printPreferences() {
   Serial_print("  wind_log_store_len:   "); Serial_println(prefs.wind_log_store_len);
   Serial_print("  send_data_interval_min:     "); Serial_println(prefs.send_data_interval_min);
   Serial_print("  n_send_retries:             "); Serial_println(prefs.n_send_retries);
+  Serial_println();
+
   Serial_print("  tcp_packet_size:            "); Serial_println(prefs.tcp_packet_size);
   Serial_print("  send_over_tcp:              "); Serial_println(prefs.send_over_tcp);
+  Serial_print("  tcp_server_ip:              "); Serial_println(prefs.tcp_server_ip);
+  Serial_print("  tcp_server_port:            "); Serial_println(prefs.tcp_server_port);
   Serial_println();
 
   Serial_print("  at_timeout_s:    ");       Serial_println(prefs.at_timeout_s);
@@ -254,7 +265,8 @@ void printPreferences() {
   Serial_print("  enable_wind_speed_read:   "); Serial_println(prefs.enable_wind_speed_read);
   Serial_println();
 
-  Serial_print("  read_temp_enabled:          "); Serial_println(prefs.read_temp_enabled);
+  Serial_print("  read_temp_in:               "); Serial_println(prefs.read_temp_in);
+  Serial_print("  read_temp_out:              "); Serial_println(prefs.read_temp_out);
   Serial_println();
 
   Serial_print("  vbat_calib:   ");   Serial_println(String(prefs.vbat_calib, 9));
@@ -291,8 +303,11 @@ bool saveNewPrefValue(String key, String value) {
   else if(key == "store_wind_data_interval_s") {
     prefs.store_wind_data_interval_s = value.toInt();
   }
-  else if(key == "read_temp_enabled") {
-    prefs.read_temp_enabled = value.toInt();
+  else if(key == "read_temp_in") {
+    prefs.read_temp_in = value.toInt();
+  }
+  else if(key == "read_temp_out") {
+    prefs.read_temp_out = value.toInt();
   }
   else if(key == "error_led_on_time_ms") {
     prefs.error_led_on_time_ms = value.toInt();
@@ -369,6 +384,12 @@ bool saveNewPrefValue(String key, String value) {
   else if(key == "send_over_tcp") {
     prefs.send_over_tcp = constrain(value.toInt(), 0, 1);
   }
+  else if(key == "tcp_server_ip") {
+    value.toCharArray(prefs.tcp_server_ip, sizeof(prefs.tcp_server_ip));
+  }
+  else if(key == "tcp_server_port") {
+    prefs.tcp_server_port = (uint16_t)constrain(value.toInt(), 1L, 65535L);
+  }
 
   else {
     Serial_print("Unable to find the prefs key: '"); Serial_print(key); Serial_println("'");
@@ -401,11 +422,14 @@ String getPostBodyPrefs() {
   body += "sleep_hour_end=" + String(prefs.sleep_hour_end) + ";";
 
   body += "store_wind_data_interval_s=" + String(prefs.store_wind_data_interval_s) + ";";
-  body += "read_temp_enabled=" + String(prefs.read_temp_enabled) + ";";
+  body += "read_temp_in=" + String(prefs.read_temp_in) + ";";
+  body += "read_temp_out=" + String(prefs.read_temp_out) + ";";
   body += "send_data_interval_min=" + String(prefs.send_data_interval_min) + ";";
   body += "n_send_retries=" + String(prefs.n_send_retries) + ";";
   body += "tcp_packet_size=" + String(prefs.tcp_packet_size) + ";";
   body += "send_over_tcp=" + String(prefs.send_over_tcp) + ";";
+  body += "tcp_server_ip=" + String(prefs.tcp_server_ip) + ";";
+  body += "tcp_server_port=" + String(prefs.tcp_server_port) + ";";
 
   body += "at_timeout_s=" + String(prefs.at_timeout_s) + ";";
   body += "sim_timeout_s=" + String(prefs.sim_timeout_s) + ";";

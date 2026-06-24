@@ -1,7 +1,7 @@
 class ErrorLogger {
 public:
 
-    static constexpr int ERROR_CODE_VERSION = 4;
+    static constexpr int ERROR_CODE_VERSION = 6;
 
     // --- Enum of all possible errors ---
     enum ErrorCode {
@@ -16,6 +16,7 @@ public:
         ERR_SEND_CIMI_FAIL               = 6,
         ERR_SEND_GPRS_FAIL               = 7,
         ERR_SEND_HTTP_FAIL_DATA          = 8,
+        ERR_SEND_CLTS_NOT_SET             = 9,
         ERR_SEND_UNKWN_FAIL              = 10,
         ERR_SEND_REPEAT                  = 11,
         ERR_SEND_FAIL_WRONG_RESPONSE     = 12,
@@ -25,44 +26,44 @@ public:
         ERR_SEND_ERRORS_HTTP_FAIL_RESPONSE = 16,
         ERR_SEND_V_BATT_TOO_LOW          = 17, 
 
-        ERR_TCP_CONN_START, // TODO asign numbers to all the errors and shitf other error names
-        ERR_TCP_SEND_DATA,
-        ERR_TCP_SEND_PREFS,
-        ERR_TCP_SEND_ERRORS,
-        ERR_TCP_CONN_CLOSED,
-        ERR_TCP_CONN_NOT_OK,
-        ERR_TCP_CIPSEND,
-        ERR_TCP_NO_SRV_RESPONSE,
-        ERR_TCP_WRONG_RESPONSE_LEN,
-        ERR_TCP_NO_GOT_RESPONSE,
+        ERR_TCP_CONN_START              = 18,
+        ERR_TCP_SEND_DATA               = 19,
+        ERR_TCP_SEND_PREFS              = 20,
+        ERR_TCP_SEND_ERRORS             = 21,
+        ERR_TCP_CONN_CLOSED             = 22,
+        ERR_TCP_CONN_NOT_OK             = 23,
+        ERR_TCP_CIPSEND                 = 24,
+        ERR_TCP_NO_SRV_RESPONSE         = 25,
+        ERR_TCP_WRONG_RESPONSE_LEN      = 26,
+        ERR_TCP_NO_GOT_RESPONSE         = 27,
 
         // ---- direction wind vane ----
-        ERR_DIR_READ             = 20,
-        ERR_DIR_READ_ONCE        = 21,
-        ERR_DIR_NOT_CONNECTED    = 22,
-        ERR_DIR_SHORT_BUF_FULL   = 23,
-        ERR_DIR_SDA_NOT_CONN     = 24,
-        ERR_DIR_SCL_NOT_CONN     = 25,
-        ERR_DIR_MAG_WEAK         = 26,
+        ERR_DIR_READ             = 30,
+        ERR_DIR_READ_ONCE        = 31,
+        ERR_DIR_NOT_CONNECTED    = 32,
+        ERR_DIR_SHORT_BUF_FULL   = 33,
+        ERR_DIR_SDA_NOT_CONN     = 34,
+        ERR_DIR_SCL_NOT_CONN     = 35,
+        ERR_DIR_MAG_WEAK         = 36,
 
         // ---- WIND ----
-        ERR_WIND_BUF_OVERWRITE   = 30,
-        ERR_WIND_SHORT_BUF_FULL  = 31,
-        ERR_WIND_NOT_CONNECTED   = 32,
+        ERR_WIND_BUF_OVERWRITE   = 40,
+        ERR_WIND_SHORT_BUF_FULL  = 41,
+        ERR_WIND_NOT_CONNECTED   = 42,
 
         // ---- TEMP ----
-        ERR_TEMP_READ_OUT        = 40,
-        ERR_TEMP_READ_IN         = 41,
+        ERR_TEMP_READ_OUT        = 50,
+        ERR_TEMP_READ_IN         = 51,
 
         // ---- POWER / RESET ----
-        ERR_RESET_BROWNOUT       = 52,
-        ERR_RESET_PANIC          = 53,
-        ERR_RESET_WDT            = 54,
-        ERR_RESET_UNEXPECTED     = 55,
-        ERR_CANT_SEND_FORCE_RST  = 56,
+        ERR_RESET_BROWNOUT       = 60,
+        ERR_RESET_PANIC          = 61,
+        ERR_RESET_WDT            = 62,
+        ERR_RESET_UNEXPECTED     = 63,
+        ERR_CANT_SEND_FORCE_RST  = 64,
         
-        LOG_RESET_SW             = 70,
-        LOG_RESET_POWERON        = 71,
+        LOG_RESET_SW             = 80,
+        LOG_RESET_POWERON        = 81,
 
         ERR_COUNT_MAX            = 100
     };
@@ -185,6 +186,7 @@ public:
         body += "ERR_SEND_CIMI_FAIL=6;";
         body += "ERR_SEND_GPRS_FAIL=7;";
         body += "ERR_SEND_HTTP_FAIL_DATA=8;";
+        body += "ERR_SEND_CLTS_NOT_SET=9;";
         body += "ERR_SEND_UNKWN_FAIL=10;";
         body += "ERR_SEND_REPEAT=11;";
         body += "ERR_SEND_FAIL_WRONG_RESPONSE=12;";
@@ -194,33 +196,45 @@ public:
         body += "ERR_SEND_ERRORS_HTTP_FAIL_RESPONSE=16;";
         body += "ERR_SEND_V_BATT_TOO_LOW=17;";
 
+        // ---- TCP ----
+        body += "ERR_TCP_CONN_START=18;";
+        body += "ERR_TCP_SEND_DATA=19;";
+        body += "ERR_TCP_SEND_PREFS=20;";
+        body += "ERR_TCP_SEND_ERRORS=21;";
+        body += "ERR_TCP_CONN_CLOSED=22;";
+        body += "ERR_TCP_CONN_NOT_OK=23;";
+        body += "ERR_TCP_CIPSEND=24;";
+        body += "ERR_TCP_NO_SRV_RESPONSE=25;";
+        body += "ERR_TCP_WRONG_RESPONSE_LEN=26;";
+        body += "ERR_TCP_NO_GOT_RESPONSE=27;";
+
         // ---- DIR / I2C ----
-        body += "ERR_DIR_READ=20;";
-        body += "ERR_DIR_READ_ONCE=21;";
-        body += "ERR_DIR_NOT_CONNECTED=22;";
-        body += "ERR_DIR_SHORT_BUF_FULL=23;";
-        body += "ERR_DIR_SDA_NOT_CONN=24;";
-        body += "ERR_DIR_SCL_NOT_CONN=25;";
-        body += "ERR_DIR_MAG_WEAK=26;";
+        body += "ERR_DIR_READ=30;";
+        body += "ERR_DIR_READ_ONCE=31;";
+        body += "ERR_DIR_NOT_CONNECTED=32;";
+        body += "ERR_DIR_SHORT_BUF_FULL=33;";
+        body += "ERR_DIR_SDA_NOT_CONN=34;";
+        body += "ERR_DIR_SCL_NOT_CONN=35;";
+        body += "ERR_DIR_MAG_WEAK=36;";
 
         // ---- WIND ----
-        body += "ERR_WIND_BUF_OVERWRITE=30;";
-        body += "ERR_WIND_SHORT_BUF_FULL=31;";
-        body += "ERR_WIND_NOT_CONNECTED=32;";
+        body += "ERR_WIND_BUF_OVERWRITE=40;";
+        body += "ERR_WIND_SHORT_BUF_FULL=41;";
+        body += "ERR_WIND_NOT_CONNECTED=42;";
 
         // ---- TEMP ----
-        body += "ERR_TEMP_READ_OUT=40;";
-        body += "ERR_TEMP_READ_IN=41;";
+        body += "ERR_TEMP_READ_OUT=50;";
+        body += "ERR_TEMP_READ_IN=51;";
 
         // ---- POWER / RESET ----
-        body += "ERR_RESET_BROWNOUT=52;";
-        body += "ERR_RESET_PANIC=53;";
-        body += "ERR_RESET_WDT=54;";
-        body += "ERR_RESET_UNEXPECTED=55;";
-        body += "ERR_CANT_SEND_FORCE_RST=56;";
+        body += "ERR_RESET_BROWNOUT=60;";
+        body += "ERR_RESET_PANIC=61;";
+        body += "ERR_RESET_WDT=62;";
+        body += "ERR_RESET_UNEXPECTED=63;";
+        body += "ERR_CANT_SEND_FORCE_RST=64;";
 
-        body += "LOG_RESET_SW=70;";
-        body += "LOG_RESET_POWERON=71;";
+        body += "LOG_RESET_SW=80;";
+        body += "LOG_RESET_POWERON=81;";
 
         return body;
     }
@@ -247,6 +261,8 @@ public:
                 return "GPRS / data connection failed";
             case ERR_SEND_HTTP_FAIL_DATA:
                 return "HTTP data send failed";
+            case ERR_SEND_CLTS_NOT_SET:
+                return "Network time synchronization (CLTS) was not enabled";
             case ERR_SEND_UNKWN_FAIL:
                 return "Unknown send failure";
             case ERR_SEND_REPEAT:
@@ -264,6 +280,27 @@ public:
                 return "HTTP error-log response invalid";
             case ERR_SEND_V_BATT_TOO_LOW:
                 return "Battery voltage too low to send";
+
+            case ERR_TCP_CONN_START:
+                return "TCP connection start failed";
+            case ERR_TCP_SEND_DATA:
+                return "TCP data send failed";
+            case ERR_TCP_SEND_PREFS:
+                return "TCP prefs send failed";
+            case ERR_TCP_SEND_ERRORS:
+                return "TCP error-log send failed";
+            case ERR_TCP_CONN_CLOSED:
+                return "TCP connection closed";
+            case ERR_TCP_CONN_NOT_OK:
+                return "TCP connection not OK";
+            case ERR_TCP_CIPSEND:
+                return "TCP CIPSEND failed";
+            case ERR_TCP_NO_SRV_RESPONSE:
+                return "TCP no server response";
+            case ERR_TCP_WRONG_RESPONSE_LEN:
+                return "TCP wrong response length";
+            case ERR_TCP_NO_GOT_RESPONSE:
+                return "TCP GOT response missing";
 
             // ---- DIR / I2C ----
             case ERR_DIR_READ:

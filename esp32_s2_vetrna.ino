@@ -45,7 +45,7 @@ SerialMod0 SerialUart0(UART_NUM_0, UART_DEBUG_SIM_TX_PIN, UART_DEBUG_SIM_RX_PIN)
 #include "MyPrefs.h"
 #include "FloatRunningAverage.h"
 #include <string.h>  // for memcpy
-#include "SH40_SoftI2C.h"
+#include "temp_sensor.h"
 #include "speed_hal_sensor.h"
 #include "sim800c_comunicator.h"
 #include <driver/rtc_io.h>
@@ -89,15 +89,15 @@ do {                              \
 #define DIR_SENSOR_POWER_PIN 5
 MagDirSensor3D windDirSensor(DIR_SENSOR_SDA_PIN, DIR_SENSOR_SCL_PIN, DIR_SENSOR_POWER_PIN);
 
-#define SH40_1_PWR_PIN   10
-#define SH40_1_SDA_PIN   8
-#define SH40_1_SCL_PIN   9
-SH40SoftI2C sht1(SH40_1_SDA_PIN, SH40_1_SCL_PIN, SH40_1_PWR_PIN, 1);
+#define TEMP_1_PWR_PIN   12
+#define TEMP_1_SDA_PIN   11
+#define TEMP_1_SCL_PIN   13
+SH40 tempSensorIn(TEMP_1_SDA_PIN, TEMP_1_SCL_PIN, TEMP_1_PWR_PIN, 1);
 
-#define SH40_2_PWR_PIN   12
-#define SH40_2_SDA_PIN   11
-#define SH40_2_SCL_PIN   13
-SH40SoftI2C sht2(SH40_2_SDA_PIN, SH40_2_SCL_PIN, SH40_2_PWR_PIN, 2);
+#define TEMP_2_PWR_PIN   10
+#define TEMP_2_SDA_PIN   8
+#define TEMP_2_SCL_PIN   9
+AHT20 tempSensorOut(TEMP_2_SDA_PIN, TEMP_2_SCL_PIN, TEMP_2_PWR_PIN, 2);
 
 SimpleButton buttonInfo;
 SimpleButton buttonSend;
@@ -244,6 +244,7 @@ void checkSensorsConnected() {
 }
 
 bool accurateTimeSet = false;
+time_t accurateTimeSetAt = 0;
 bool hasSendAfterTurnOn = false; 
 volatile bool updateSerialEnabled = false;
 
@@ -351,6 +352,7 @@ void setup() {
     int64_t now_s = now_rtc_s();
     set_system_time_unix((time_t)now_s);
     accurateTimeSet = true;
+    if (accurateTimeSetAt == 0) accurateTimeSetAt = (time_t)now_s;
     Serial_print("Woke up from deep sleep. Current time:"); Serial_println(getFormattedTimeLibString());
     Serial_print("We need to sleep until: "); Serial_println(getFormattedUnixTime(sleepUntil));
     
@@ -363,19 +365,19 @@ void setup() {
     evaluateIfDeepSleep();
   }
 
-  SerialAT.begin(9600, SERIAL_8N1, SIM_RX_PIN, SIM_TX_PIN);
+  SerialAT.begin(115200, SERIAL_8N1, SIM_RX_PIN, SIM_TX_PIN);
 
   pinMode(GPRS_ON_PIN, OUTPUT); POWER_GPRS_BOARD_OFF();
   pinMode(GPRS_POWER_PIN, OUTPUT); digitalWrite(GPRS_POWER_PIN, HIGH); // off
   //pinMode(BLINK_LED_PIN, OUTPUT);  digitalWrite(BLINK_LED_PIN, HIGH); // on
   pinMode(SPIN_LED_PIN, OUTPUT);   digitalWrite(SPIN_LED_PIN, LOW);     // off
   pinMode(ERROR_LED_PIN, OUTPUT);  digitalWrite(ERROR_LED_PIN, LOW);    // off
-  pinMode(SH40_1_PWR_PIN, OUTPUT);  digitalWrite(SH40_1_PWR_PIN, LOW);
-  // pinMode(SH40_2_PWR_PIN, OUTPUT);  digitalWrite(SH40_2_PWR_PIN, LOW);
+  tempSensorOut.init();
+  tempSensorIn.init();
   pinMode(WAKE_PIN, INPUT);
   pinMode(DONE_PIN, INPUT_PULLDOWN);
   
-  // Power ON SH40
+  // Temp/humidity sensors are powered only while reading.
   //pinMode(TIMER_PIN, OUTPUT); digitalWrite(TIMER_PIN, LOW);
   //pinMode(VANE_POWER_PIN, OUTPUT); digitalWrite(VANE_POWER_PIN, HIGH);  
   //gpio_set_drive_capability((gpio_num_t) VANE_POWER_PIN, GPIO_DRIVE_CAP_3);
@@ -402,9 +404,6 @@ void setup() {
     windDirSensor.loadNorthOffset();
     Serial_print("Loaded north offset: "); Serial_println(windDirSensor.getNorthOffset());
   }
-
-  sht1.init();
-  //sht2.init();
 
   setCpuFrequencyMhz(80);
 
@@ -512,15 +511,22 @@ void setup() {
   reset_watchdog_timer();
 }
 
-bool readTempHum(SH40SoftI2C &tempHumSensor, float &t, float &h) {
+bool readTempHum(TempSensor &tempHumSensor, float &t, float &h) {
   tempHumSensor.setPower(true);
 
   if (!tempHumSensor.checkIsConnected()) {
     Serial_print("ERROR: Temp sensor"); Serial_print(tempHumSensor.id); Serial_println(": is not connected!");
+    tempHumSensor.setPower(false);
     return false;
   }
 
-  delay(10);
+  delay(40);
+  if (!tempHumSensor.init_calibrate()) {
+    Serial_print("ERROR: Temp sensor"); Serial_print(tempHumSensor.id); Serial_println(": init/calibrate failed!");
+    tempHumSensor.setPower(false);
+    return false;
+  }
+
   int readStatus = 0;
   int retries = 10;
   for(int i=0; i<retries; i++) {
@@ -611,7 +617,7 @@ bool performFullWindDirRead(int& angle) {
   if(readStatus != MagDirSensor3D::ReadStatus::OK) {
     error_notify_led = 1;
     angle = readStatus; // save the readStatus inside the angle if the reading failed 
-    Serial_print("ERROR: Sensor read failed! readStatus"); Serial_println(readStatus);
+    //Serial_print("ERROR: Sensor read failed! readStatus"); Serial_println(readStatus);
     return false;
   }
 
@@ -1134,8 +1140,8 @@ void readTempSensors() {
   hum_out = NAN;
   bool tempReadSuccess = false;
 
-  if ((prefs.read_temp_enabled & 0x01) > 0) {
-    tempReadSuccess = readTempHum(sht1, temp_out, hum_out);
+  if (prefs.read_temp_out > 0) {
+    tempReadSuccess = readTempHum(tempSensorOut, temp_out, hum_out);
     if (!tempReadSuccess) {
       elog.log(ErrorLogger::ERR_TEMP_READ_OUT);
     } else {
@@ -1143,12 +1149,12 @@ void readTempSensors() {
       Serial_print("humy_out:"); Serial_println(String(hum_out, 1));
     }
   } else {
-    Serial_print("Temperature OUTside reading disabled by prefs.read_temp_enabled:");
-    Serial_println(prefs.read_temp_enabled);
+    Serial_print("Temperature OUTside reading disabled by prefs.read_temp_out:");
+    Serial_println(prefs.read_temp_out);
   }
 
-  if ((prefs.read_temp_enabled & 0x02) > 0) {
-    tempReadSuccess = readTempHum(sht2, temp_in, hum_in);
+  if (prefs.read_temp_in > 0) {
+    tempReadSuccess = readTempHum(tempSensorIn, temp_in, hum_in);
     if (!tempReadSuccess) {
       elog.log(ErrorLogger::ERR_TEMP_READ_IN);
     } else {
@@ -1156,13 +1162,13 @@ void readTempSensors() {
       Serial_print("humy_in:"); Serial_println(String(hum_in, 1));
     }
   } else {
-    Serial_print("Temperature INside reading disabled by prefs.read_temp_enabled:");
-    Serial_println(prefs.read_temp_enabled);
+    Serial_print("Temperature INside reading disabled by prefs.read_temp_in:");
+    Serial_println(prefs.read_temp_in);
   }
 
 }
 
-
+int n_failed_sends = 0;
 void fullCycleSend() {
   const int nSendRetrys = prefs.n_send_retries;
   bool sendOk = false;
@@ -1181,10 +1187,12 @@ void fullCycleSend() {
       Serial_println("Send successful!");
       sendOk = true;
       lastSuccessfulSend = millis(); 
+      n_failed_sends = 0;
     } else {
       elog.log(ErrorLogger::ERR_SEND_REPEAT);
       Serial_print("ERROR: Send failed");
       error_notify_led = 1;
+      n_failed_sends++;
     }
 
     Serial_println("Finished sending!");
@@ -1213,7 +1221,7 @@ void printDiagnosticInfo() {
   bool success;
   /*
   temp_in = NAN; hum_in = NAN;
-  success = readTempHum(sht1, temp_in, hum_in);
+  success = readTempHum(tempSensorOut, temp_in, hum_in);
   if (!success) {
     Serial_println("ERROR: temp1 failed to read"); 
   } else {
@@ -1297,23 +1305,23 @@ bool updateSerial() {
       Serial_print(inputBuffer);
       Serial_print("'\r\n");
 
-      handlePrefSerialCommand(inputBuffer);
-      //if (inputBuffer[0] == 'o' || inputBuffer[0] == 'O') {
-      //  turnOnModule();
-      //} else if (inputBuffer[0] == 'x' || inputBuffer[0] == 'X') {
-      //  turnOffModule();
-      //} else if (inputBuffer[0] == 's' || inputBuffer[0] == 'S') {
-      //  fullCycleSend();
-      //} else if (inputBuffer[0] == 'i' || inputBuffer[0] == 'I') {
-      //  printDiagnosticInfo();
-      //} else if (inputBuffer[0] == 'n') {
-      //  setPhoneNumber(inputBuffer);
+      //handlePrefSerialCommand(inputBuffer);
+      if (inputBuffer[0] == 'o' || inputBuffer[0] == 'O') {
+        turnOnModule();
+      } else if (inputBuffer[0] == 'x' || inputBuffer[0] == 'X') {
+        turnOffModule();
+      } else if (inputBuffer[0] == 's' || inputBuffer[0] == 'S') {
+        fullCycleSend();
+      } else if (inputBuffer[0] == 'i' || inputBuffer[0] == 'I') {
+        printDiagnosticInfo();
+      } else if (inputBuffer[0] == 'n') {
+        setPhoneNumber(inputBuffer);
       //} else if (handlePrefSerialCommand(inputBuffer)) {
-        // Handled locally.
-      //} else {
-      //  SerialAT.println(inputBuffer.c_str());
-      //  //SerialAT.write(inputBuffer.c_str());       //Forward what Serial received to Software Serial Port
-      //}
+       // Handled locally.
+      } else {
+        //SerialAT.println(inputBuffer.c_str());
+        SerialAT.write(inputBuffer.c_str());       //Forward what Serial received to Software Serial Port
+      }
       
       inputBuffer = "";
     } else {
@@ -1397,6 +1405,7 @@ void restoreTimeIfScheduledReset() {
 
         set_system_time_unix(restored); // Restore system time
         accurateTimeSet = true;
+        if (accurateTimeSetAt == 0) accurateTimeSetAt = restored;
         Serial_print("Restored time after scheduled reset: ");  Serial_println(restored);
         Serial_print("Restored datetime: "); Serial_println(getFormattedTimeLibString());
     } else {
@@ -1444,6 +1453,44 @@ String getPostBody() {
   return body;
 }
 
+String getPostBodyShort() {
+  String body = "";
+  body.reserve(512);   // avoid fragmentation, improve speed
+  body += "pref=" + String(prefs.pref_version) + ";";
+  //body += "prefDate=" + getFormattedUnixTime(prefs.pref_set_date) + ";";
+  body += "ver=" + String(prefs.version) + ";";
+  body += "short=1;";
+
+  if (!isnan(temp_in))  body += "temp_in=" + String(temp_in, 1) + ";";
+  if (!isnan(hum_in))   body += "hum_in=" + String(hum_in, 0) + ";";
+  if (!isnan(temp_out)) body += "temp_out=" + String(temp_out, 1) + ";";
+  if (!isnan(hum_out))  body += "hum_out=" + String(hum_out, 0) + ";";
+  body += "vbatIde=" + String(getVBattAvg(), 3) + ";";
+  body += "vbatGprs=" + String(read_batt_v(), 3) + ";";
+  body += "vsol=" + String(getVSolarAvg(), 3) + ";"; 
+  body += "dur=" + String((millis() - httpGetStart) / 1000.0, 1) + ";";
+  body += "signal=" + String(signalStrength) + ";";
+
+  if (simDuration     > 3*1000) body += "simDur=" + String(simDuration / 1000.0, 1) + ";";
+  if (regDuration     > 4*1000) body += "regDur=" + String(regDuration / 1000.0, 1) + ";";
+  if (gprsRegDuration > 5*1000) body += "gprsRegDur=" + String(gprsRegDuration / 1000.0, 1) + ";";
+  //body += "err_ver=" + String(ErrorLogger::ERROR_CODE_VERSION) + ";";
+  if (elog.getNErrorsLogged() > 0) body += "errors=" + elog.getAllForSend() + ";";
+
+  return body;
+}
+
+bool trySendingShortMessage() {
+    // to many fails just send the short message to avoid sending too much data and failing again
+    setSendShortMessage(true);
+    if(sendOverHttp() == SendResult::OK) return true;
+
+    setSendShortMessage(true);
+    if(!sendOverTCP()) return true;
+
+    return false;
+}
+
 
 bool sendDataToServer(int nTry) {
   signalStrength = -1;
@@ -1454,6 +1501,12 @@ bool sendDataToServer(int nTry) {
   Serial_println("\n\nSending data to the server...");
 
   if(!establishConnection()) return false;
+
+  if(n_failed_sends > 20) {
+    // to many fails just send the short message to avoid sending too much data and failing again
+    trySendingShortMessage();
+  }
+
 
   if(prefs.send_over_tcp == 1) {
     if(!startTcpConnection()) {
@@ -1497,16 +1550,6 @@ bool sendDataToServer(int nTry) {
 
   return true;
 }
-
-
-
-
-
-
-
-
-
-
 
 
 
